@@ -1,0 +1,20 @@
+{
+  "name": "snake",
+  "version": "1.0.0",
+  "description": "OggyP Snake",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
+  },
+  "keywords": [
+    "snake"
+  ],
+  "author": "OggyP",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^5.0.1",
+    "mysql": "^2.18.1",
+    "ws": "^7.5.3"
+  }
+}
