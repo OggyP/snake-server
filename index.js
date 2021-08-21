@@ -430,20 +430,17 @@ wss.on('connection', function(ws){
             if (result.length === 1) {
               bcrypt.compare(rec_msg.password, result[0].password_hash, function(error, response) {
                 if (response) {
-                  console.log(result[0].username + " attempted to login.")
-                  if (!user_about.hasOwnProperty(result[0].user_id)) {
-                    user_id = result[0].user_id
-                    user_about[user_id] = new user(user_id, result[0].rating2, result[0].username,  result[0].title, result[0].rating3, result[0].rd2)
-                    logged_in = true;
-                    sendToWs(ws, 'login', 'success', [])
-                  } else if (!user_about[result[0].user_id].logged_in) {
-                    user_id = result[0].user_id
-                    user_about[user_id] = new user(user_id, result[0].rating2, result[0].username, result[0].title, result[0].rating3, result[0].rd2)
-                    logged_in = true;
-                    sendToWs(ws, 'login', 'success', [])
-                  } else {
-                    sendToWs(ws, 'login', 'fail', [['reason', 'You are already logged in.']])
+                  console.log(result[0].username + " logged in.")
+                  user_id = result[0].user_id
+                  if (user_about.hasOwnProperty(result[0].user_id) && user_about[result[0].user_id].logged_in) {
+                    sendToWs(user_about[user_id].ws, "error", "You have logged in somewhere else.", [])
+                    user_about[user_id].ws.close();
+                    console.log("Force logged out " + result[0].username + " | Logged in somewhere else.")
                   }
+                  user_about[user_id] = new user(user_id, result[0].rating2, result[0].username,  result[0].title, result[0].rating3, result[0].rd2)
+                  user_about[user_id].ws = ws
+                  logged_in = true;
+                  sendToWs(ws, 'login', 'success', [])
                 } else {
                   sendToWs(ws, 'login', 'fail', [['reason', 'Invaild password.']])
                 }
