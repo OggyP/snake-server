@@ -9,3 +9,5 @@ This code is the server side Node JS code for https://snake.oggyp.com
 > mysql
 
 > ws
+
+> uuid

@@ -44,7 +44,7 @@ var wss = new WebSocketServer({
 });
 
 // Get snake database user info
-// This is done to conceal the username and password
+// Done to conceal the username and password
 var userInfo = JSON.parse(fs.readFileSync('userInfo.txt', 'utf8'))
 
 var con = mysql.createConnection({
@@ -58,6 +58,9 @@ con.connect(function(err) {
   if (err) throw err;
   console.log("MYSQL Connected!");
 });
+
+// Import UUID
+const { v4: uuidv4 } = require('uuid');
 
 // ==========================================
 // ==========================================
@@ -144,7 +147,7 @@ class queue {
     this.rated = rated
     this.mode = mode
     this.waitingAmt = 0;
-    this.uuid = createUUID();
+    this.uuid = uuidv4();
     console.log("Queue made | UUID: " + this.uuid + " | Player Amount: " +  this.maxPlayers + " | Rated: " +  this.rated + " | Version: " +  this.mode)
   }
   sendAllPlayerList() {
@@ -201,7 +204,7 @@ class queue {
       active_games.push(this.uuid)
       games[this.uuid] = newGame
       this.waitingAmt = 0
-      this.uuid = createUUID();
+      this.uuid = uuidv4();
     }
     return userPlayer;
   }
@@ -323,10 +326,28 @@ const calc3playerRating = (ownRating, scoreVplayer1, player1rating, scoreVplayer
   })
 }
 
+// Get tokens that are valid from the last week and store the user ids associated
+var savedTokens = {}
+con.query("SELECT user_id, token, tokenTime FROM users WHERE token IS NOT NULL AND tokenTime IS NOT NULL AND tokenTime >= curdate() - INTERVAL DAYOFWEEK(curdate())+6 DAY", function (err, results, fields) {
+  if (err) throw err;
+  if (results.length !== 0) {
+    results.forEach(result => {
+      savedTokens[result.token] = {}
+      savedTokens[result.token].userID = result.user_id
+      savedTokens[result.token].time = result.tokenTime
+    })
+    console.log(results.length + " token(s) found.")
+  } else {
+    console.log("No valid tokens found")
+  }
+});
+
 const default_rating = 1200;
 const default_rating_deviation = 350;
 
-const version = 2.2;
+// SERVER VERSION
+const version = 3.0;
+// =================
 var private_games = {}
 var games = {};
 var CLIENTS = [];
@@ -349,7 +370,7 @@ var queueList = new matchQueue(queues)
 wss.on('connection', function(ws){
   console.log('Client connection attempt')
   CLIENTS.push(ws);
-  const UUID = createUUID();
+  const UUID = uuidv4();
   var logged_in = false;
   var player;
   var user_id;
@@ -363,7 +384,7 @@ wss.on('connection', function(ws){
     try {
       rec_msg = JSON.parse(message)
       if (!rec_msg.hasOwnProperty('password')) {
-        // console.log(rec_msg)
+        console.log(rec_msg)
       }
       if (logged_in) {
         if (!UUID_WS[UUID][1] && !UUID_WS[UUID][2] && !UUID_WS[UUID][3]) {
@@ -378,7 +399,7 @@ wss.on('connection', function(ws){
               UUID_WS[UUID][2] = true;
               player = 'player1'
               private_game_code = getRndInteger(1000000, 9999999);
-              game_uuid = createUUID()
+              game_uuid = uuidv4();
               UUID_WS[UUID][4] = game_uuid
               private_games[private_game_code] = [UUID, game_uuid, user_id]
               sendToWs(ws, 'match', 'private match wait', [['code', private_game_code]])
@@ -454,11 +475,21 @@ wss.on('connection', function(ws){
                     oldUserWS.close();
                     console.log("Force logged out " + result[0].username + " | Logged in somewhere else.")
                   }
+                  const token = uuidv4();
                   user_about[result[0].user_id] = new user(result[0].user_id, result[0].rating2, result[0].username,  result[0].title, result[0].rating3, result[0].rd2)
                   user_about[result[0].user_id].uuid = UUID
                   user_about[result[0].user_id].logged_in = true
                   logged_in = true;
-                  sendToWs(ws, 'login', 'success', [])
+                  // Save Token to SQL
+                  var sql = "UPDATE users SET token = " + mysql.escape(token) + ", tokenTime = sysdate() WHERE user_id = " + mysql.escape(result[0].user_id);
+                  console.log(sql)
+                  con.query(sql, function (err, register_insert_result) {
+                    if (err) throw err;
+                    savedTokens[token] = {}
+                    savedTokens[token].userID = result[0].user_id
+                    savedTokens[token].time = "Bruh this does nothing cus idk how SQL and JS time works help"
+                    sendToWs(ws, 'login', 'success', [["token", token]])
+                  });
                 } else {
                   sendToWs(ws, 'login', 'fail', [['reason', 'Invaild password.']])
                 }
@@ -468,12 +499,36 @@ wss.on('connection', function(ws){
             }
           });
         }
-
         else if (rec_msg.type === 'register') {
           if (rec_msg.hasOwnProperty("content") && user_regex.test(rec_msg.content) && rec_msg.content.length < 100 && rec_msg.content.length >= 5) {
             register(rec_msg, ws)
           } else {
             sendToWs(ws, 'register', 'fail', [['reason', 'Only numbers, letters, hypens, periods, spaces and underscores are allowed for usernames. Maximum length is 100 characters. Min is 5']])
+          }
+        }
+        else if (rec_msg.type === 'token') {
+          if (savedTokens.hasOwnProperty(rec_msg.content)) {
+            console.log(savedTokens[rec_msg.content])
+            con.query("SELECT * FROM users WHERE user_id = " + mysql.escape(savedTokens[rec_msg.content].userID) + " AND tokenTime >= curdate() - INTERVAL DAYOFWEEK(curdate())+6 DAY", function (err, result, fields) {
+              if (err) throw err;
+              if (result.length === 1) {
+                console.log(result[0].username + " logged in.")
+                user_id = result[0].user_id
+                if (user_about.hasOwnProperty(result[0].user_id)) {
+                  let oldUserWS = UUID_WS[user_about[result[0].user_id].uuid][0]
+                  sendToWs(oldUserWS, "error", "You have logged in somewhere else.", [])
+                  oldUserWS.close();
+                  console.log("Force logged out " + result[0].username + " | Logged in somewhere else.")
+                }
+                user_about[result[0].user_id] = new user(result[0].user_id, result[0].rating2, result[0].username,  result[0].title, result[0].rating3, result[0].rd2)
+                user_about[result[0].user_id].uuid = UUID
+                user_about[result[0].user_id].logged_in = true
+                logged_in = true;
+                sendToWs(ws, 'login', 'success', [])
+              } else {
+                sendToWs(ws, 'login', 'fail', [['reason', 'Token expired, please login again.']])
+              }
+            });
           }
         }
       }
@@ -873,13 +928,6 @@ function processGames() {
 }
 
 // functions
-function createUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-     var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-     return v.toString(16);
-  });
-}
-
 function sendToWs(ws, type, content, meta) {
   for (var member in WS_Message) delete WS_Message[member];
   if (meta.length > 0) {
