@@ -417,7 +417,7 @@ wss.on('connection', function(ws){
             sendToWs(ws, 'rating', user_about[user_id].rating2, [['rating3', user_about[user_id].rating3], ['reliable', user_about[user_id].ratingReliable()]])
           }
         } else {
-          if (rec_msg.type === 'movement') {
+          if (rec_msg.type === 'movement' && UUID_WS[UUID][1]) {
             let current_game = games[game_uuid];
             if (current_game[player].direction !== JSON.stringify(rec_msg.content) && current_game[player].old_direction !== JSON.stringify(rec_msg.content)) {
               //Math.abs(rec_msg.content[1]) === 1
@@ -448,13 +448,14 @@ wss.on('connection', function(ws){
                 if (response) {
                   console.log(result[0].username + " logged in.")
                   user_id = result[0].user_id
-                  if (user_about.hasOwnProperty(result[0].user_id) && user_about[result[0].user_id].logged_in) {
-                    sendToWs(user_about[user_id].ws, "error", "You have logged in somewhere else.", [])
-                    user_about[user_id].ws.close();
+                  if (user_about.hasOwnProperty(result[0].user_id)) {
+                    sendToWs(user_about[result[0].user_id].ws, "error", "You have logged in somewhere else.", [])
+                    user_about[result[0].user_id].ws.close();
                     console.log("Force logged out " + result[0].username + " | Logged in somewhere else.")
                   }
-                  user_about[user_id] = new user(user_id, result[0].rating2, result[0].username,  result[0].title, result[0].rating3, result[0].rd2)
-                  user_about[user_id].ws = ws
+                  user_about[result[0].user_id] = new user(result[0].user_id, result[0].rating2, result[0].username,  result[0].title, result[0].rating3, result[0].rd2)
+                  user_about[result[0].user_id].ws = ws
+                  user_about[result[0].user_id].logged_in = true
                   logged_in = true;
                   sendToWs(ws, 'login', 'success', [])
                 } else {
@@ -491,9 +492,6 @@ wss.on('connection', function(ws){
 
     if (UUID_WS[UUID][1]) {
       games[game_uuid].left.push(UUID)
-    }
-    if (logged_in) {
-      user_about[user_id].logged_in = false
     }
     // delete UUID_WS[UUID]
   });
