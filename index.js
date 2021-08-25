@@ -147,6 +147,20 @@ class queue {
     this.uuid = createUUID();
     console.log("Queue made | UUID: " + this.uuid + " | Player Amount: " +  this.maxPlayers + " | Rated: " +  this.rated + " | Version: " +  this.mode)
   }
+  sendAllPlayerList() {
+    let currentPlayerList = [];
+    for (let k = 1; k <= this.maxPlayers; k++) {
+      if (this.hasOwnProperty("player" + k)) {
+        currentPlayerList.push(user_about[this["player" + k][2]].username)
+      }
+    }
+    for (let k = 1; k <= this.maxPlayers; k++) {
+      if (this.hasOwnProperty("player" + k)) {
+        sendToWs(this["player" + k][0], "queuingPlayers", currentPlayerList, [["maxPlayers", this.maxPlayers]])
+      }
+    }
+
+  }
   join(userWS, userUUID, userID) {
     console.log("User joined game | UUID: " +  this.uuid + " | Player Amount: " +  this.maxPlayers + " | Rated: " +  this.rated + " | Version: " +  this.mode)
     let userPlayer;
@@ -158,6 +172,7 @@ class queue {
         UUID_WS[userUUID][3] = true
         UUID_WS[userUUID][4] = this.uuid
         userPlayer = "player" + i
+        this.sendAllPlayerList()
         break;
       }
     }
@@ -197,6 +212,7 @@ class queue {
         UUID_WS[this["player" + i][1]][3] = false
         delete this["player" + i]
         console.log("User deleted from game, new JSON:")
+        this.sendAllPlayerList()
         break;
       }
     }
@@ -310,7 +326,7 @@ const calc3playerRating = (ownRating, scoreVplayer1, player1rating, scoreVplayer
 const default_rating = 1200;
 const default_rating_deviation = 350;
 
-const version = 1.0;
+const version = 2.1;
 var private_games = {}
 var games = {};
 var CLIENTS = [];
@@ -340,7 +356,7 @@ wss.on('connection', function(ws){
   var private_game_code;
   UUID_WS[UUID] = [ws, false, false, false, ""]
               //ws, in game, private, in queue, game UUID
-  sendToWs(ws, 'gameVersion', version, ["modes", queues])
+  sendToWs(ws, 'gameVersion', version, [["modes", queues]])
   // On message
   ws.on('message', function(message) {
     var game_uuid = UUID_WS[UUID][4]
@@ -876,11 +892,7 @@ function sendToWs(ws, type, content, meta) {
   WS_Message.type = type;
   WS_Message.content = content;
   ws.send(JSON.stringify(WS_Message));
-  // console.log('Sent | ' + JSON.stringify(WS_Message))
-}
-
-function send_err_close(ws, error_msg) {
-  sendToWs(ws, 'error', error_msg, [])
+  console.log('Sent | ' + JSON.stringify(WS_Message))
 }
 
 function getRndInteger(min, max) {
@@ -906,14 +918,10 @@ function update3Rating(user_id, rating) {
   });
 }
 
-
-function in2Darray(arr1, arr2) {
-  arr1.forEach(item => {
-    if (JSON.stringify(item) === JSON.stringify(arr2)) {
-      return true;
-    }
-  });
-  return false;
+function sendAll(type, msg, meta) {
+  for (var i = 0; i < CLIENTS.length; i++) {
+    sendToWs(CLIENTS[i], type, msg, meta)
+  }
 }
 
 function register(msg, webSocketToSend) {
