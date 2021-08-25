@@ -346,7 +346,7 @@ const default_rating = 1200;
 const default_rating_deviation = 350;
 
 // SERVER VERSION
-const version = 3.0;
+const version = 4.0;
 // =================
 var private_games = {}
 var games = {};
@@ -437,6 +437,15 @@ wss.on('connection', function(ws){
           } else if (rec_msg.type === 'rating') {
             sendToWs(ws, 'rating', user_about[user_id].rating2, [['rating3', user_about[user_id].rating3], ['reliable', user_about[user_id].ratingReliable()]])
           }
+          else if (rec_msg.type === 'logout') {
+            console.log("logout")
+            delete savedTokens[rec_msg.token]
+            sql = "UPDATE users SET token = NULL, tokenTime = NULL WHERE token = " + mysql.escape(rec_msg.token);
+            con.query(sql, function (err, register_insert_result) {
+              if (err) throw err;
+              sendToWs(ws, 'logout', '', [])
+            });
+          } 
         } else {
           if (rec_msg.type === 'movement' && UUID_WS[UUID][1]) {
             let current_game = games[game_uuid];
@@ -472,7 +481,7 @@ wss.on('connection', function(ws){
                   if (user_about.hasOwnProperty(result[0].user_id)) {
                     let oldUserWS = UUID_WS[user_about[result[0].user_id].uuid][0]
                     sendToWs(oldUserWS, "error", "You have logged in somewhere else.", [])
-                    oldUserWS.close();
+                    oldUserWS.close(1, "Logged in at a different location.");
                     console.log("Force logged out " + result[0].username + " | Logged in somewhere else.")
                   }
                   const token = uuidv4();
@@ -488,7 +497,7 @@ wss.on('connection', function(ws){
                     savedTokens[token] = {}
                     savedTokens[token].userID = result[0].user_id
                     savedTokens[token].time = "Bruh this does nothing cus idk how SQL and JS time works help"
-                    sendToWs(ws, 'login', 'success', [["token", token]])
+                    sendToWs(ws, 'login', 'success', [["token", token], ["username", result[0].username]])
                   });
                 } else {
                   sendToWs(ws, 'login', 'fail', [['reason', 'Invaild password.']])
@@ -509,7 +518,7 @@ wss.on('connection', function(ws){
         else if (rec_msg.type === 'token') {
           if (savedTokens.hasOwnProperty(rec_msg.content)) {
             console.log(savedTokens[rec_msg.content])
-            con.query("SELECT * FROM users WHERE user_id = " + mysql.escape(savedTokens[rec_msg.content].userID) + " AND tokenTime >= curdate() - INTERVAL DAYOFWEEK(curdate())+6 DAY", function (err, result, fields) {
+            con.query("SELECT * FROM users WHERE user_id = " + mysql.escape(savedTokens[rec_msg.content].userID) + " AND tokenTime >= curdate() - INTERVAL DAYOFWEEK(curdate())+7 DAY", function (err, result, fields) {
               if (err) throw err;
               if (result.length === 1) {
                 console.log(result[0].username + " logged in.")
@@ -524,7 +533,7 @@ wss.on('connection', function(ws){
                 user_about[result[0].user_id].uuid = UUID
                 user_about[result[0].user_id].logged_in = true
                 logged_in = true;
-                sendToWs(ws, 'login', 'success', [])
+                sendToWs(ws, 'login', 'success', [["username", result[0].username]])
               } else {
                 sendToWs(ws, 'login', 'fail', [['reason', 'Token expired, please login again.']])
               }
