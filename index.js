@@ -326,7 +326,7 @@ const calc3playerRating = (ownRating, scoreVplayer1, player1rating, scoreVplayer
 const default_rating = 1200;
 const default_rating_deviation = 350;
 
-const version = 2.1;
+const version = 2.2;
 var private_games = {}
 var games = {};
 var CLIENTS = [];
@@ -363,7 +363,7 @@ wss.on('connection', function(ws){
     try {
       rec_msg = JSON.parse(message)
       if (!rec_msg.hasOwnProperty('password')) {
-        console.log(rec_msg)
+        // console.log(rec_msg)
       }
       if (logged_in) {
         if (!UUID_WS[UUID][1] && !UUID_WS[UUID][2] && !UUID_WS[UUID][3]) {
@@ -449,12 +449,13 @@ wss.on('connection', function(ws){
                   console.log(result[0].username + " logged in.")
                   user_id = result[0].user_id
                   if (user_about.hasOwnProperty(result[0].user_id)) {
-                    sendToWs(user_about[result[0].user_id].ws, "error", "You have logged in somewhere else.", [])
-                    user_about[result[0].user_id].ws.close();
+                    let oldUserWS = UUID_WS[user_about[result[0].user_id].uuid][0]
+                    sendToWs(oldUserWS, "error", "You have logged in somewhere else.", [])
+                    oldUserWS.close();
                     console.log("Force logged out " + result[0].username + " | Logged in somewhere else.")
                   }
                   user_about[result[0].user_id] = new user(result[0].user_id, result[0].rating2, result[0].username,  result[0].title, result[0].rating3, result[0].rd2)
-                  user_about[result[0].user_id].ws = ws
+                  user_about[result[0].user_id].uuid = UUID
                   user_about[result[0].user_id].logged_in = true
                   logged_in = true;
                   sendToWs(ws, 'login', 'success', [])
