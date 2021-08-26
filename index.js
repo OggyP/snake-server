@@ -215,7 +215,7 @@ class queue {
         this.waitingAmt --
         UUID_WS[this["player" + i][1]][3] = false
         delete this["player" + i]
-        console.log("User deleted from game, new JSON:")
+        console.log("User deleted from game")
         this.sendAllPlayerList()
         break;
       }
@@ -347,7 +347,7 @@ const default_rating = 1200;
 const default_rating_deviation = 350;
 
 // SERVER VERSION
-const version = 5.0;
+const version = 6.0;
 // =================
 var private_games = {}
 var games = {};
@@ -384,9 +384,6 @@ wss.on('connection', function(ws){
     var game_uuid = UUID_WS[UUID][4]
     try {
       rec_msg = JSON.parse(message)
-      if (!rec_msg.hasOwnProperty('password')) {
-        console.log(rec_msg)
-      }
       if (logged_in) {
         if (!UUID_WS[UUID][1] && !UUID_WS[UUID][2] && !UUID_WS[UUID][3]) {
           if (rec_msg.type === 'match') {
@@ -440,8 +437,8 @@ wss.on('connection', function(ws){
           }
           else if (rec_msg.type === 'logout') {
             console.log("logout")
-            delete savedTokens[rec_msg.token]
-            sql = "UPDATE users SET token = NULL, tokenTime = NULL WHERE token = " + mysql.escape(rec_msg.token);
+            delete savedTokens[rec_msg.token.split('|')[1]]
+            sql = "UPDATE users SET token = NULL, tokenTime = NULL WHERE user_id = " + mysql.escape(rec_msg.token.split('|')[1]);
             con.query(sql, function (err, register_insert_result) {
               if (err) throw err;
               sendToWs(ws, 'logout', '', [])
@@ -924,7 +921,6 @@ function sendToWs(ws, type, content, meta) {
   WS_Message.type = type;
   WS_Message.content = content;
   ws.send(JSON.stringify(WS_Message));
-  console.log('Sent | ' + JSON.stringify(WS_Message))
 }
 
 function getRndInteger(min, max) {
