@@ -18,7 +18,8 @@ var fs = require('fs');
 var https = require('https');
 var mysql = require('mysql');
 const bcrypt = require('bcrypt');               //Importing the NPM bcrypt package.
-const saltRounds = 10;                          //We are setting salt rounds, higher is safer.
+const passwordSaltRounds = 10;                          //We are setting salt rounds, higher is safer.
+const tokenSaltRounds = 5;
 
 // read ssl certificate
 var privateKey = fs.readFileSync('/etc/letsencrypt/live/snake.oggyp.com/privkey.pem', 'utf8');
@@ -332,9 +333,9 @@ con.query("SELECT user_id, token, tokenTime FROM users WHERE token IS NOT NULL A
   if (err) throw err;
   if (results.length !== 0) {
     results.forEach(result => {
-      savedTokens[result.token] = {}
-      savedTokens[result.token].userID = result.user_id
-      savedTokens[result.token].time = result.tokenTime
+      savedTokens[result.user_id] = {}
+      savedTokens[result.user_id].tokenHash = result.token
+      savedTokens[result.user_id].time = result.tokenTime
     })
     console.log(results.length + " token(s) found.")
   } else {
@@ -346,7 +347,7 @@ const default_rating = 1200;
 const default_rating_deviation = 350;
 
 // SERVER VERSION
-const version = 4.0;
+const version = 5.0;
 // =================
 var private_games = {}
 var games = {};
@@ -484,21 +485,11 @@ wss.on('connection', function(ws){
                     oldUserWS.close(1, "Logged in at a different location.");
                     console.log("Force logged out " + result[0].username + " | Logged in somewhere else.")
                   }
-                  const token = uuidv4();
                   user_about[result[0].user_id] = new user(result[0].user_id, result[0].rating2, result[0].username,  result[0].title, result[0].rating3, result[0].rd2)
                   user_about[result[0].user_id].uuid = UUID
                   user_about[result[0].user_id].logged_in = true
                   logged_in = true;
-                  // Save Token to SQL
-                  var sql = "UPDATE users SET token = " + mysql.escape(token) + ", tokenTime = sysdate() WHERE user_id = " + mysql.escape(result[0].user_id);
-                  console.log(sql)
-                  con.query(sql, function (err, register_insert_result) {
-                    if (err) throw err;
-                    savedTokens[token] = {}
-                    savedTokens[token].userID = result[0].user_id
-                    savedTokens[token].time = "Bruh this does nothing cus idk how SQL and JS time works help"
-                    sendToWs(ws, 'login', 'success', [["token", token], ["username", result[0].username]])
-                  });
+                  generateToken(ws, user_id, result[0].username)
                 } else {
                   sendToWs(ws, 'login', 'fail', [['reason', 'Invaild password.']])
                 }
@@ -516,33 +507,18 @@ wss.on('connection', function(ws){
           }
         }
         else if (rec_msg.type === 'token') {
-          if (savedTokens.hasOwnProperty(rec_msg.content)) {
-            console.log(savedTokens[rec_msg.content])
-            con.query("SELECT * FROM users WHERE user_id = " + mysql.escape(savedTokens[rec_msg.content].userID) + " AND tokenTime >= curdate() - INTERVAL DAYOFWEEK(curdate())+7 DAY", function (err, result, fields) {
-              if (err) throw err;
-              if (result.length === 1) {
-                console.log(result[0].username + " logged in.")
-                user_id = result[0].user_id
-                if (user_about.hasOwnProperty(result[0].user_id)) {
-                  let oldUserWS = UUID_WS[user_about[result[0].user_id].uuid][0]
-                  sendToWs(oldUserWS, "error", "You have logged in somewhere else.", [])
-                  oldUserWS.close();
-                  console.log("Force logged out " + result[0].username + " | Logged in somewhere else.")
-                }
-                user_about[result[0].user_id] = new user(result[0].user_id, result[0].rating2, result[0].username,  result[0].title, result[0].rating3, result[0].rd2)
-                user_about[result[0].user_id].uuid = UUID
-                user_about[result[0].user_id].logged_in = true
-                logged_in = true;
-                sendToWs(ws, 'login', 'success', [["username", result[0].username]])
-              } else {
-                sendToWs(ws, 'login', 'fail', [['reason', 'Token expired, please login again.']])
-              }
-            });
+          var tokenInfo = rec_msg.content.split('|')
+          if (savedTokens.hasOwnProperty(tokenInfo[1])) {
+            verifyToken(ws, tokenInfo[1], tokenInfo[0], UUID)
+          } else {
+            sendToWs(ws, 'login', 'fail', [['reason', 'Invaild Session.']])
           }
         }
       }
     }
-    catch (e) {}
+    catch (e) {
+      sendToWs(ws, 'error', 'Unknown Error has Occoured On OggyP Snake Servers. Please contact me about how this issue occoured', [])
+    }
   });
 
   // On close
@@ -586,7 +562,7 @@ wss.on('connection', function(ws){
 // ================================================================================
 
 // FOR EACH GAME EVERY 0.1 SECONDS
-setInterval(processGames, 50);
+setInterval(processGames, 25);
 
 function processGames() {
   for (var k = 0; k < active_games.length; k++) {
@@ -980,13 +956,59 @@ function sendAll(type, msg, meta) {
   }
 }
 
+function generateToken(ws, userID, username) {
+  const token = uuidv4()
+  bcrypt.hash(token, tokenSaltRounds, (err, hash) => {
+    // Save Hashed Token to SQL
+    var sql = "UPDATE users SET token = " + mysql.escape(hash) + ", tokenTime = sysdate() WHERE user_id = " + mysql.escape(userID);
+    console.log(sql)
+    con.query(sql, function (err, register_insert_result) {
+      if (err) throw err;
+      savedTokens[userID] = {}
+      savedTokens[userID].tokenHash = hash
+      savedTokens[userID].time = "Bruh this does nothing cus idk how SQL and JS time works help"
+      sendToWs(ws, 'login', 'success', [["token", token], ["username", username], ["userID", userID]])
+    });
+  });
+}
+
+function verifyToken(ws, userID, clearToken, UUID) {
+  console.log("User ID: " + userID + " hashed token: " + clearToken)
+  bcrypt.compare(clearToken, savedTokens[userID].tokenHash, function(error, response) {
+    if (response) {
+      con.query("SELECT * FROM users WHERE user_id = " + mysql.escape(userID) + " AND tokenTime >= curdate() - INTERVAL DAYOFWEEK(curdate())+7 DAY", function (err, result, fields) {
+        if (err) throw err;
+        if (result.length === 1) {
+          console.log(result[0].username + " logged in.")
+          user_id = result[0].user_id
+          if (user_about.hasOwnProperty(result[0].user_id)) {
+            let oldUserWS = UUID_WS[user_about[result[0].user_id].uuid][0]
+            sendToWs(oldUserWS, "error", "You have logged in somewhere else.", [])
+            oldUserWS.close();
+            console.log("Force logged out " + result[0].username + " | Logged in somewhere else.")
+          }
+          user_about[result[0].user_id] = new user(result[0].user_id, result[0].rating2, result[0].username,  result[0].title, result[0].rating3, result[0].rd2)
+          user_about[result[0].user_id].uuid = UUID
+          user_about[result[0].user_id].logged_in = true
+          logged_in = true;
+          sendToWs(ws, 'login', 'success', [["username", result[0].username]])
+        } else {
+          sendToWs(ws, 'login', 'fail', [['reason', 'Session expired, please login again.']])
+        }
+      });
+    } else {
+      sendToWs(ws, 'login', 'fail', [['reason', 'Invaild Session.']])
+    }
+  });
+}
+
 function register(msg, webSocketToSend) {
   con.query("SELECT * FROM users WHERE username = " + mysql.escape(msg.content), function (err, result, fields) {
     if (err) throw err;
     if (result.length > 0) {
       sendToWs(webSocketToSend, 'register', 'fail', [['reason', 'That username is taken.']])
     } else {
-      bcrypt.hash(msg.password, saltRounds, (err, hash) => {
+      bcrypt.hash(msg.password, passwordSaltRounds, (err, hash) => {
         var sql = "INSERT INTO users (username, password_hash, rating2, rating3, rd2, title) VALUES (" + mysql.escape(msg.content) + ", " + mysql.escape(hash) + ", " + mysql.escape(default_rating) + ", " + mysql.escape(default_rating) + ", " + mysql.escape(default_rating_deviation) + ", \"\")";
         console.log(sql)
         con.query(sql, function (err, register_insert_result) {
