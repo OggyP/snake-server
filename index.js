@@ -77,13 +77,13 @@ class game {
     this.tick = true
     this.version = version
     this.mode = players.length
-    this.player1 = new player(players[0][0], [0, 0], [0, 1], players[0][1])
-    this.player2 = new player(players[1][0], [159, 74], [0, -1], players[1][1])
+    this.player1 = new player(players[0][0], [0, 0], [0, 1], players[0][1], players[0][2])
+    this.player2 = new player(players[1][0], [159, 74], [0, -1], players[1][1], players[1][2])
     if (players.length > 2) {
-      this.player3 = new player(players[2][0], [0, 74], [0, -1], players[2][1])
+      this.player3 = new player(players[2][0], [0, 74], [0, -1], players[2][1], players[2][2])
     }
     if (players.length > 3) {
-      this.player4 = new player(players[3][0], [159, 0], [0, 1], players[3][1])
+      this.player4 = new player(players[3][0], [159, 0], [0, 1], players[3][1], players[3][2])
     }
     this.remaining = players.length
     // previous_remaining will show how many platers were remaining last tick
@@ -184,8 +184,9 @@ class queue {
       console.log("Game full | UUID: " + this.uuid + " | Player Amount: " + this.maxPlayers + " | Rated: " + this.rated + " | Version: " + this.mode)
       let playerList = []
       for (let i = 1; i <= this.maxPlayers; i++) {
-        playerList.push([this["player" + i][1], this["player" + i][2]])
+        playerList.push([this["player" + i][1], this["player" + i][2], user_about[this["player" + i][2]].rating3])
       }
+      console.log(playerList)
       let newGame = new game(this.uuid, this.rated, playerList, this.mode)
       newGame.food = [getRndInteger(0, x_box_amount - 1), getRndInteger(0, y_box_amount - 1)]
       let meta = []
@@ -241,6 +242,7 @@ class player {
     this.alerted = false;
     this.collision_amt;
     this.rated = false;
+    this.startRating = startRating;
   }
 }
 
@@ -481,7 +483,7 @@ wss.on('connection', function(ws){
                   if (user_about.hasOwnProperty(result[0].user_id)) {
                     let oldUserWS = UUID_WS[user_about[result[0].user_id].uuid][0]
                     sendToWs(oldUserWS, "error", "You have logged in somewhere else.", [])
-                    oldUserWS.close(1, "Logged in at a different location.");
+                    oldUserWS.close();
                     console.log("Force logged out " + result[0].username + " | Logged in somewhere else.")
                   }
                   user_about[result[0].user_id] = new user(result[0].user_id, result[0].rating2, result[0].username,  result[0].title, result[0].rating3, result[0].rd2)
@@ -834,6 +836,7 @@ function processGames() {
                   // remaining is 2 so the player came last
                   calc3playerRating(player_to_check.startRating, 0, all_players[0].startRating, 0, all_players[1].startRating)
                   .then(data => {
+                    //const calc3playerRating = (ownRating, scoreVplayer1, player1rating, scoreVplayer2, player2rating) 
                     update3Rating(player_to_check.user_id, data);
                   });
                 }
