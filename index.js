@@ -376,7 +376,7 @@ wss.on('connection', function(ws){
   var player;
   var user_id;
   var private_game_code;
-  UUID_WS[UUID] = [ws, false, false, false, ""]
+  UUID_WS[UUID] = [ws, false, false, false, "", false]
               //ws, in game, private, in queue, game UUID
   sendToWs(ws, 'gameVersion', version, [["modes", queues]])
   // On message
@@ -384,9 +384,11 @@ wss.on('connection', function(ws){
     var game_uuid = UUID_WS[UUID][4]
     try {
       rec_msg = JSON.parse(message)
-      if (logged_in) {
+      console.log(rec_msg)
+      if (UUID_WS[UUID][5]) {
         if (!UUID_WS[UUID][1] && !UUID_WS[UUID][2] && !UUID_WS[UUID][3]) {
           if (rec_msg.type === 'match') {
+            console.log("Join Req")
             if (rec_msg.content === 'random') {
               if (queueList.hasOwnProperty(rec_msg.mode)) {
                 player = queueList[rec_msg.mode].join(ws, UUID, user_id)
@@ -485,7 +487,7 @@ wss.on('connection', function(ws){
                   user_about[result[0].user_id] = new user(result[0].user_id, result[0].rating2, result[0].username,  result[0].title, result[0].rating3, result[0].rd2)
                   user_about[result[0].user_id].uuid = UUID
                   user_about[result[0].user_id].logged_in = true
-                  logged_in = true;
+                  UUID_WS[UUID][5] = true;
                   generateToken(ws, user_id, result[0].username)
                 } else {
                   sendToWs(ws, 'login', 'fail', [['reason', 'Invaild password.']])
@@ -506,7 +508,34 @@ wss.on('connection', function(ws){
         else if (rec_msg.type === 'token') {
           var tokenInfo = rec_msg.content.split('|')
           if (savedTokens.hasOwnProperty(tokenInfo[1])) {
-            verifyToken(ws, tokenInfo[1], tokenInfo[0], UUID)
+            var userID = tokenInfo[1]
+            console.log("User ID: " + userID + " hashed token: " + tokenInfo[0])
+            bcrypt.compare(tokenInfo[0], savedTokens[userID].tokenHash, function(error, response) {
+              if (response) {
+                con.query("SELECT * FROM users WHERE user_id = " + mysql.escape(userID) + " AND tokenTime >= curdate() - INTERVAL DAYOFWEEK(curdate())+7 DAY", function (err, result, fields) {
+                  if (err) throw err;
+                  if (result.length === 1) {
+                    console.log(result[0].username + " logged in.")
+                    user_id = result[0].user_id
+                    if (user_about.hasOwnProperty(result[0].user_id)) {
+                      let oldUserWS = UUID_WS[user_about[result[0].user_id].uuid][0]
+                      sendToWs(oldUserWS, "error", "You have logged in somewhere else.", [])
+                      oldUserWS.close();
+                      console.log("Force logged out " + result[0].username + " | Logged in somewhere else.")
+                    }
+                    user_about[result[0].user_id] = new user(result[0].user_id, result[0].rating2, result[0].username,  result[0].title, result[0].rating3, result[0].rd2)
+                    user_about[result[0].user_id].uuid = UUID
+                    user_about[result[0].user_id].logged_in = true
+                    UUID_WS[UUID][5] = true;
+                    sendToWs(ws, 'login', 'success', [["username", result[0].username]])
+                  } else {
+                    sendToWs(ws, 'login', 'fail', [['reason', 'Session expired, please login again.']])
+                  }
+                });
+              } else {
+                sendToWs(ws, 'login', 'fail', [['reason', 'Invaild Session.']])
+              }
+            });
           } else {
             sendToWs(ws, 'login', 'fail', [['reason', 'Invaild Session.']])
           }
@@ -515,6 +544,7 @@ wss.on('connection', function(ws){
     }
     catch (e) {
       sendToWs(ws, 'error', 'Unknown Error has Occoured On OggyP Snake Servers. Please contact me about how this issue occoured', [])
+      console.log(e)
     }
   });
 
@@ -546,9 +576,6 @@ wss.on('connection', function(ws){
 
     if (UUID_WS[UUID][1]) {
       games[game_uuid].left.push(UUID)
-    }
-    if (logged_in) {
-      user_about[user_id].logged_in = false
     }
     // delete UUID_WS[UUID]
   });
@@ -969,33 +996,7 @@ function generateToken(ws, userID, username) {
 }
 
 function verifyToken(ws, userID, clearToken, UUID) {
-  console.log("User ID: " + userID + " hashed token: " + clearToken)
-  bcrypt.compare(clearToken, savedTokens[userID].tokenHash, function(error, response) {
-    if (response) {
-      con.query("SELECT * FROM users WHERE user_id = " + mysql.escape(userID) + " AND tokenTime >= curdate() - INTERVAL DAYOFWEEK(curdate())+7 DAY", function (err, result, fields) {
-        if (err) throw err;
-        if (result.length === 1) {
-          console.log(result[0].username + " logged in.")
-          user_id = result[0].user_id
-          if (user_about.hasOwnProperty(result[0].user_id)) {
-            let oldUserWS = UUID_WS[user_about[result[0].user_id].uuid][0]
-            sendToWs(oldUserWS, "error", "You have logged in somewhere else.", [])
-            oldUserWS.close();
-            console.log("Force logged out " + result[0].username + " | Logged in somewhere else.")
-          }
-          user_about[result[0].user_id] = new user(result[0].user_id, result[0].rating2, result[0].username,  result[0].title, result[0].rating3, result[0].rd2)
-          user_about[result[0].user_id].uuid = UUID
-          user_about[result[0].user_id].logged_in = true
-          logged_in = true;
-          sendToWs(ws, 'login', 'success', [["username", result[0].username]])
-        } else {
-          sendToWs(ws, 'login', 'fail', [['reason', 'Session expired, please login again.']])
-        }
-      });
-    } else {
-      sendToWs(ws, 'login', 'fail', [['reason', 'Invaild Session.']])
-    }
-  });
+
 }
 
 function register(msg, webSocketToSend) {
