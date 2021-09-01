@@ -349,7 +349,7 @@ const default_rating = 1200;
 const default_rating_deviation = 350;
 
 // SERVER VERSION
-const version = 6.0;
+const version = 6.2;
 // =================
 var private_games = {}
 var games = {};
@@ -386,7 +386,6 @@ wss.on('connection', function(ws){
     var game_uuid = UUID_WS[UUID][4]
     try {
       rec_msg = JSON.parse(message)
-      console.log(rec_msg)
       if (UUID_WS[UUID][5]) {
         if (!UUID_WS[UUID][1] && !UUID_WS[UUID][2] && !UUID_WS[UUID][3]) {
           if (rec_msg.type === 'match') {
@@ -405,6 +404,7 @@ wss.on('connection', function(ws){
               UUID_WS[UUID][4] = game_uuid
               private_games[private_game_code] = [UUID, game_uuid, user_id]
               sendToWs(ws, 'match', 'private match wait', [['code', private_game_code]])
+              sendToWs(ws, "queuingPlayers", [user_about[user_id].username], [["maxPlayers", 2]])
             }
             else if (rec_msg.content === 'find private') {
               // game exists
@@ -1025,7 +1025,7 @@ function register(msg, webSocketToSend) {
 function leaveQueue(user_UUID, private_game_code, reason) {
   if (UUID_WS[user_UUID][2]) {
     delete private_games[private_game_code]
-    UUID_WS[user_UUID][3] = false
+    UUID_WS[user_UUID][2] = false
     console.log("Deleting private game - " + reason)
   }
   else if (UUID_WS[user_UUID][3]) {
