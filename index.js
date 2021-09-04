@@ -592,350 +592,354 @@ setInterval(processGames, 25);
 
 function processGames() {
   for (var k = 0; k < active_games.length; k++) {
-    let game_uuid = active_games[k]
-    const current_game = games[game_uuid];
-    if (current_game.running && (current_game.version === 2 || current_game.tick)) {
-      current_game.tick = !current_game.tick
-      var player_list = [current_game.player1, current_game.player2]
-      if (current_game.mode > 2) {
-        player_list.push(current_game.player3)
-      }
-      if (current_game.mode > 3) {
-        player_list.push(current_game.player4)
-      }
-      const player1user_id = current_game.player1.user_id
-      const player2user_id = current_game.player2.user_id
-      var new_food = false;
-      current_game.previous_remaining = current_game.remaining
-      let uuids = current_game.player_uuids();
-      if (current_game.left.length > 0) {
-        console.log('Player Left')
-        current_game.left.forEach(left_player_uuid => {
-          player_list.forEach(player_to_check => {
-            if (left_player_uuid === player_to_check.uuid ) {
-              if (!player_to_check.dead) {
-                player_to_check.placement = current_game.remaining
-                current_game.remaining --
-              }
-              player_to_check.dead = true
-              player_to_check.left = true
-              player_to_check.diedThisTick = true;
-            }
-          });
-        });
-        current_game.left = []
-      }
-      else if (current_game.start !== true) {
-        if (current_game.countdown > 0) {
-          // Countdown till game start
-          uuids.forEach(player_uuid => {
-            sendToWs(UUID_WS[player_uuid][0], 'countdown', current_game.countdown, [])
-          });
-          current_game.countdown -= 1;
-        } else {
-          console.log(current_game.uuid + ' | game started')
-          current_game.start = true;
-          uuids.forEach(player_uuid => {
-            sendToWs(UUID_WS[player_uuid][0], 'countdown', 0, [])
-          });
-        }
-      } else {
-        // for each tick
-        player_list.forEach(each_player => {
-          if (each_player.diedThisTick) {
-            each_player.diedThisTick = false;
-          }
-          if (!each_player.dead) {
-            each_player.old_direction = each_player.direction.slice()
-            each_player.snake_body.push(each_player.snake_head.slice())
-            each_player.old_head = each_player.snake_head.slice()
-            each_player.snake_head = [each_player.snake_head[0] + each_player.old_direction[0], each_player.snake_head[1] + each_player.old_direction[1]]
-    
-            if (each_player.food_countdown !== 0) {
-              each_player.food_countdown -= 1;
-            }
+    runGame(k)
+  }
+}
 
-            if (each_player.food_countdown === 0 && current_game.version !== 1) {
-              let dead_cell = each_player.snake_body.shift()
-            }
-
-            if (JSON.stringify(each_player.snake_head) === JSON.stringify(current_game.food)) {
-              
-              var in_body = true
-              while (in_body) {
-                var to_be_food = [getRndInteger(0, x_box_amount - 1), getRndInteger(0, y_box_amount - 1)]
-                all_cells = []
-                player_list.forEach(food_each_player => {
-                  all_cells = all_cells.concat(food_each_player.snake_body)
-                });
-                in_body = false;
-                all_cells.forEach(item => {
-                  if (JSON.stringify(item) === JSON.stringify(to_be_food)) {
-                    in_body = true;
-                  }
-                });
-              }
-              current_game.food = to_be_food.slice()
-              new_food = true
-              each_player.food_countdown += 51;
-            }
-          } else {
-            each_player.old_direction = [0, 0]
-          }
-        });
-        
-        all_cells = []
-        player_list.forEach(food_each_player => {
-          all_cells = all_cells.concat(food_each_player.snake_body)
-        });
-
-        // Check for win / loss
+function runGame(k) {
+  let game_uuid = active_games[k]
+  const current_game = games[game_uuid];
+  if (current_game.running && (current_game.version === 2 || current_game.tick)) {
+    current_game.tick = !current_game.tick
+    var player_list = [current_game.player1, current_game.player2]
+    if (current_game.mode > 2) {
+      player_list.push(current_game.player3)
+    }
+    if (current_game.mode > 3) {
+      player_list.push(current_game.player4)
+    }
+    const player1user_id = current_game.player1.user_id
+    const player2user_id = current_game.player2.user_id
+    var new_food = false;
+    current_game.previous_remaining = current_game.remaining
+    let uuids = current_game.player_uuids();
+    if (current_game.left.length > 0) {
+      console.log('Player Left')
+      current_game.left.forEach(left_player_uuid => {
         player_list.forEach(player_to_check => {
-          if (!player_to_check.dead) {
-            var collision_amt = 0
-            player_list.forEach(second_player_head => {
-              if (!second_player_head.dead) {
-                //if on top of each other
-                if (JSON.stringify(player_to_check.snake_head) == JSON.stringify(second_player_head.snake_head)) {
-                  collision_amt ++
-                }
-                // else if each snake went over the other
-                else if (JSON.stringify(player_to_check.snake_head) == JSON.stringify(second_player_head.old_head) && JSON.stringify(player_to_check.old_head) == JSON.stringify(second_player_head.snake_head)) {
-                  console.log('Hit Heads - overtop')
-                  collision_amt ++
-                }
-              }
-            });
-
-            if (player_to_check.snake_head[0] < 0 || player_to_check.snake_head[1] < 0 || player_to_check.snake_head[0] >= x_box_amount || player_to_check.snake_head[1] >= y_box_amount) {
-              console.log('Out of border')
-              collision_amt ++
+          if (left_player_uuid === player_to_check.uuid ) {
+            if (!player_to_check.dead) {
+              player_to_check.placement = current_game.remaining
+              current_game.remaining --
             }
+            player_to_check.dead = true
+            player_to_check.left = true
+            player_to_check.diedThisTick = true;
+          }
+        });
+      });
+      current_game.left = []
+    }
+    else if (current_game.start !== true) {
+      if (current_game.countdown > 0) {
+        // Countdown till game start
+        uuids.forEach(player_uuid => {
+          sendToWs(UUID_WS[player_uuid][0], 'countdown', current_game.countdown, [])
+        });
+        current_game.countdown -= 1;
+      } else {
+        console.log(current_game.uuid + ' | game started')
+        current_game.start = true;
+        uuids.forEach(player_uuid => {
+          sendToWs(UUID_WS[player_uuid][0], 'countdown', 0, [])
+        });
+      }
+    } else {
+      // for each tick
+      player_list.forEach(each_player => {
+        if (each_player.diedThisTick) {
+          each_player.diedThisTick = false;
+        }
+        if (!each_player.dead) {
+          each_player.old_direction = each_player.direction.slice()
+          each_player.snake_body.push(each_player.snake_head.slice())
+          each_player.old_head = each_player.snake_head.slice()
+          each_player.snake_head = [each_player.snake_head[0] + each_player.old_direction[0], each_player.snake_head[1] + each_player.old_direction[1]]
+  
+          if (each_player.food_countdown !== 0) {
+            each_player.food_countdown -= 1;
+          }
 
-            all_cells.forEach(cell => {
-              if (JSON.stringify(cell) === JSON.stringify(player_to_check.snake_head)) {
-                console.log('Collision with body')
+          if (each_player.food_countdown === 0 && current_game.version !== 1) {
+            let dead_cell = each_player.snake_body.shift()
+          }
+
+          if (JSON.stringify(each_player.snake_head) === JSON.stringify(current_game.food)) {
+            
+            var in_body = true
+            while (in_body) {
+              var to_be_food = [getRndInteger(0, x_box_amount - 1), getRndInteger(0, y_box_amount - 1)]
+              all_cells = []
+              player_list.forEach(food_each_player => {
+                all_cells = all_cells.concat(food_each_player.snake_body)
+              });
+              in_body = false;
+              all_cells.forEach(item => {
+                if (JSON.stringify(item) === JSON.stringify(to_be_food)) {
+                  in_body = true;
+                }
+              });
+            }
+            current_game.food = to_be_food.slice()
+            new_food = true
+            each_player.food_countdown += 51;
+          }
+        } else {
+          each_player.old_direction = [0, 0]
+        }
+      });
+      
+      all_cells = []
+      player_list.forEach(food_each_player => {
+        all_cells = all_cells.concat(food_each_player.snake_body)
+      });
+
+      // Check for win / loss
+      player_list.forEach(player_to_check => {
+        if (!player_to_check.dead) {
+          var collision_amt = 0
+          player_list.forEach(second_player_head => {
+            if (!second_player_head.dead) {
+              //if on top of each other
+              if (JSON.stringify(player_to_check.snake_head) == JSON.stringify(second_player_head.snake_head)) {
                 collision_amt ++
               }
-            });
-
-            player_to_check.collision_amt = collision_amt
-          }
-        });
-
-        player_list.forEach(player_to_check => {
-          // above 1 cus it thinks it is always hitting into its own head
-          if (player_to_check.collision_amt > 1) {
-            console.log('Person died')
-            player_to_check.collision_amt = 0
-            player_to_check.dead = true;
-            player_to_check.diedThisTick = true;
-            player_to_check.placement = current_game.remaining
-            current_game.remaining --
-            sendToWs(UUID_WS[player_to_check.uuid][0], 'game alert', 'YOU DIED!', [['placement', player_to_check.placement]])
-          }
-        });
-
-        if (current_game.remaining === 0) {
-          var longestLength = 0;
-          player_list.forEach(player_to_check => {
-            if (player_to_check.snake_body.length > longestLength && player_to_check.diedThisTick) {
-              longestLength = player_to_check.snake_body.length
+              // else if each snake went over the other
+              else if (JSON.stringify(player_to_check.snake_head) == JSON.stringify(second_player_head.old_head) && JSON.stringify(player_to_check.old_head) == JSON.stringify(second_player_head.snake_head)) {
+                console.log('Hit Heads - overtop')
+                collision_amt ++
+              }
             }
           });
 
-          var amountLongest = 0;
+          if (player_to_check.snake_head[0] < 0 || player_to_check.snake_head[1] < 0 || player_to_check.snake_head[0] >= x_box_amount || player_to_check.snake_head[1] >= y_box_amount) {
+            console.log('Out of border')
+            collision_amt ++
+          }
+
+          all_cells.forEach(cell => {
+            if (JSON.stringify(cell) === JSON.stringify(player_to_check.snake_head)) {
+              console.log('Collision with body')
+              collision_amt ++
+            }
+          });
+
+          player_to_check.collision_amt = collision_amt
+        }
+      });
+
+      player_list.forEach(player_to_check => {
+        // above 1 cus it thinks it is always hitting into its own head
+        if (player_to_check.collision_amt > 1) {
+          console.log('Person died')
+          player_to_check.collision_amt = 0
+          player_to_check.dead = true;
+          player_to_check.diedThisTick = true;
+          player_to_check.placement = current_game.remaining
+          current_game.remaining --
+          sendToWs(UUID_WS[player_to_check.uuid][0], 'game alert', 'YOU DIED!', [['placement', player_to_check.placement]])
+        }
+      });
+
+      if (current_game.remaining === 0) {
+        var longestLength = 0;
+        player_list.forEach(player_to_check => {
+          if (player_to_check.snake_body.length > longestLength && player_to_check.diedThisTick) {
+            longestLength = player_to_check.snake_body.length
+          }
+        });
+
+        var amountLongest = 0;
+        player_list.forEach(player_to_check => {
+          if (player_to_check.snake_body.length === longestLength && player_to_check.diedThisTick) {
+            amountLongest ++
+          }
+        });
+
+        if (amountLongest === 1) {
           player_list.forEach(player_to_check => {
             if (player_to_check.snake_body.length === longestLength && player_to_check.diedThisTick) {
-              amountLongest ++
+              player_to_check.dead = false;
+              current_game.remaining = 1;
+              console.log("snake ressurected")
             }
           });
-
-          if (amountLongest === 1) {
-            player_list.forEach(player_to_check => {
-              if (player_to_check.snake_body.length === longestLength && player_to_check.diedThisTick) {
-                player_to_check.dead = false;
-                current_game.remaining = 1;
-                console.log("snake ressurected")
-              }
-            });
-          }
         }
+      }
 
-        // update 3 player rated rating
-        if (current_game.rated && current_game.previous_remaining !== current_game.remaining && current_game.mode === 3) {
-          var dead_amt = current_game.previous_remaining - current_game.remaining
-          player_list.forEach(player_to_check => {
-            if (player_to_check.dead && !player_to_check.rated && player_to_check.diedThisTick) {
-              player_to_check.rated = true;
-              var all_players = [current_game.player1, current_game.player2, current_game.player3]
-              var own_index = all_players.indexOf(player_to_check)
-              all_players.splice(own_index, 1)
-              // player died this tick
-              if (dead_amt === 3) {
-                console.log('All draw')
-                // then all should be 0.5
-                calc3playerRating(player_to_check.startRating, 0.5, all_players[0].startRating, 0.5, all_players[1].startRating)
+      // update 3 player rated rating
+      if (current_game.rated && current_game.previous_remaining !== current_game.remaining && current_game.mode === 3) {
+        var dead_amt = current_game.previous_remaining - current_game.remaining
+        player_list.forEach(player_to_check => {
+          if (player_to_check.dead && !player_to_check.rated && player_to_check.diedThisTick) {
+            player_to_check.rated = true;
+            var all_players = [current_game.player1, current_game.player2, current_game.player3]
+            var own_index = all_players.indexOf(player_to_check)
+            all_players.splice(own_index, 1)
+            // player died this tick
+            if (dead_amt === 3) {
+              console.log('All draw')
+              // then all should be 0.5
+              calc3playerRating(player_to_check.startRating, 0.5, all_players[0].startRating, 0.5, all_players[1].startRating)
+              .then(data => {
+                update3Rating(player_to_check.user_id, data);
+              });
+            } else if (dead_amt === 2) {
+              console.log("Two draw")
+              // alive rating should be lost against, other player's rating should be tied against 
+              if (current_game.remaining === 1) {
+                // draw last
+                var deadPlayerID;
+                var alivePlayerID;
+                all_players.forEach(playerIndexToCheck => {
+                  if (!playerIndexToCheck.dead) {
+                    alivePlayerID = playerIndexToCheck.startRating;
+                  } else {
+                    deadPlayerID = playerIndexToCheck.startRating;
+                  }
+                });
+                calc3playerRating(player_to_check.startRating, 0.5, deadPlayerID, 0, alivePlayerID)
                 .then(data => {
                   update3Rating(player_to_check.user_id, data);
                 });
-              } else if (dead_amt === 2) {
-                console.log("Two draw")
-                // alive rating should be lost against, other player's rating should be tied against 
-                if (current_game.remaining === 1) {
-                  // draw last
-                  var deadPlayerID;
-                  var alivePlayerID;
-                  all_players.forEach(playerIndexToCheck => {
-                    if (!playerIndexToCheck.dead) {
-                      alivePlayerID = playerIndexToCheck.startRating;
-                    } else {
-                      deadPlayerID = playerIndexToCheck.startRating;
-                    }
-                  });
-                  calc3playerRating(player_to_check.startRating, 0.5, deadPlayerID, 0, alivePlayerID)
-                  .then(data => {
-                    update3Rating(player_to_check.user_id, data);
-                  });
-                } else {
-                  // draw first
-                  var loosingPlayer;
-                  var drawPlayer;
-                  all_players.forEach(playerIndexToCheck => {
-                    if (playerIndexToCheck.placement < 3) {
-                      drawPlayer = playerIndexToCheck.startRating;
-                    } else {
-                      loosingPlayer = playerIndexToCheck.startRating;
-                    }
-                  });
-                  calc3playerRating(player_to_check.startRating, 0.5, drawPlayer, 1, loosingPlayer)
-                  .then(data => {
-                    update3Rating(player_to_check.user_id, data);
-                  });
-                }
-                
               } else {
-                console.log('SINGLE PLAYER DIED 3 PLAYER RATED')
-                // only 1 player died this round 
-                if (current_game.remaining === 1) {
-                  // came second
-                  var deadPlayerID;
-                  var alivePlayerID;
-                  all_players.forEach(playerIndexToCheck => {
-                    if (!playerIndexToCheck.dead) {
-                      alivePlayerID = playerIndexToCheck.startRating;
-                    } else {
-                      deadPlayerID = playerIndexToCheck.startRating;
-                    }
-                  });
-                  calc3playerRating(player_to_check.startRating, 1, deadPlayerID, 0, alivePlayerID)
-                  .then(data => {
-                    update3Rating(player_to_check.user_id, data);
-                  });
-                } else {
-                  // remaining is 2 so the player came last
-                  calc3playerRating(player_to_check.startRating, 0, all_players[0].startRating, 0, all_players[1].startRating)
-                  .then(data => {
-                    //const calc3playerRating = (ownRating, scoreVplayer1, player1rating, scoreVplayer2, player2rating) 
-                    update3Rating(player_to_check.user_id, data);
-                  });
-                }
-              }
-            }
-          });
-        }
-
-        // 1 player remaining (1 player wins)
-        if (current_game.remaining === 1) {
-          var winner;
-          player_list.forEach(player_to_check => {
-            if (!player_to_check.dead && !player_to_check.left) {
-              sendToWs(UUID_WS[player_to_check.uuid][0], 'end', 'YOU WIN!', [])
-              winner = player_to_check
-            }
-          });
-          if (current_game.rated) {
-            // RATED CODE
-            if (current_game.mode === 3) {
-              var all_players = [current_game.player1, current_game.player2, current_game.player3]
-              var own_index = all_players.indexOf(winner)
-              all_players.splice(own_index, 1)
-              calc3playerRating(winner.startRating, 1, all_players[0].startRating, 1, all_players[1].startRating)
-              .then(data => {
-                update3Rating(winner.user_id, data);
-              });
-            }
-            if (current_game.mode === 2) {
-              if (!current_game.player1.dead) {
-                calculateRating_2player(0, user_about[player1user_id].rating2, user_about[player2user_id].rating2, user_about[player1user_id].rd2, user_about[player2user_id].rd2)
+                // draw first
+                var loosingPlayer;
+                var drawPlayer;
+                all_players.forEach(playerIndexToCheck => {
+                  if (playerIndexToCheck.placement < 3) {
+                    drawPlayer = playerIndexToCheck.startRating;
+                  } else {
+                    loosingPlayer = playerIndexToCheck.startRating;
+                  }
+                });
+                calc3playerRating(player_to_check.startRating, 0.5, drawPlayer, 1, loosingPlayer)
                 .then(data => {
-                  updateRating(player1user_id, data[0]);
-                  updateRating(player2user_id, data[1]);
+                  update3Rating(player_to_check.user_id, data);
+                });
+              }
+              
+            } else {
+              console.log('SINGLE PLAYER DIED 3 PLAYER RATED')
+              // only 1 player died this round 
+              if (current_game.remaining === 1) {
+                // came second
+                var deadPlayerID;
+                var alivePlayerID;
+                all_players.forEach(playerIndexToCheck => {
+                  if (!playerIndexToCheck.dead) {
+                    alivePlayerID = playerIndexToCheck.startRating;
+                  } else {
+                    deadPlayerID = playerIndexToCheck.startRating;
+                  }
+                });
+                calc3playerRating(player_to_check.startRating, 1, deadPlayerID, 0, alivePlayerID)
+                .then(data => {
+                  update3Rating(player_to_check.user_id, data);
                 });
               } else {
-                calculateRating_2player(1, user_about[player1user_id].rating2, user_about[player2user_id].rating2, user_about[player1user_id].rd2, user_about[player2user_id].rd2)
+                // remaining is 2 so the player came last
+                calc3playerRating(player_to_check.startRating, 0, all_players[0].startRating, 0, all_players[1].startRating)
                 .then(data => {
-                  updateRating(player1user_id, data[0]);
-                  updateRating(player2user_id, data[1]);
+                  //const calc3playerRating = (ownRating, scoreVplayer1, player1rating, scoreVplayer2, player2rating) 
+                  update3Rating(player_to_check.user_id, data);
                 });
               }
             }
           }
-          player_list.forEach(player_to_check => {
-            if (!player_to_check.left) {
-              if (winner !== player_to_check && !player_to_check.left) {
-                sendToWs(UUID_WS[player_to_check.uuid][0], 'end', user_about[winner.user_id].username + ' won the game!', [])
-              }
-              UUID_WS[player_to_check.uuid][1] = false
-            }
-          });
-          current_game.running = false;
-          const game_index = active_games.indexOf(game_uuid)
-          active_games.splice(game_index, 1)
-        }
-        // draw so 0 players remaing (draw)
-        else if (current_game.remaining < 1) {
-          player_list.forEach(player_to_check => {
-            if (!player_to_check.left) {
-              sendToWs(UUID_WS[player_to_check.uuid][0], 'end', 'DRAW!', [])
-            }
-            UUID_WS[player_to_check.uuid][1] = false
-          });
-          if (current_game.rated) {
-            // draw
-            if (current_game.mode === 2) {
-              calculateRating_2player(2, user_about[player1user_id].rating2, user_about[player2user_id].rating2, user_about[player1user_id].rd2, user_about[player2user_id].rd2)
+        });
+      }
+
+      // 1 player remaining (1 player wins)
+      if (current_game.remaining === 1) {
+        var winner;
+        player_list.forEach(player_to_check => {
+          if (!player_to_check.dead && !player_to_check.left) {
+            sendToWs(UUID_WS[player_to_check.uuid][0], 'end', 'YOU WIN!', [])
+            winner = player_to_check
+          }
+        });
+        if (current_game.rated) {
+          // RATED CODE
+          if (current_game.mode === 3) {
+            var all_players = [current_game.player1, current_game.player2, current_game.player3]
+            var own_index = all_players.indexOf(winner)
+            all_players.splice(own_index, 1)
+            calc3playerRating(winner.startRating, 1, all_players[0].startRating, 1, all_players[1].startRating)
+            .then(data => {
+              update3Rating(winner.user_id, data);
+            });
+          }
+          if (current_game.mode === 2) {
+            if (!current_game.player1.dead) {
+              calculateRating_2player(0, user_about[player1user_id].rating2, user_about[player2user_id].rating2, user_about[player1user_id].rd2, user_about[player2user_id].rd2)
+              .then(data => {
+                updateRating(player1user_id, data[0]);
+                updateRating(player2user_id, data[1]);
+              });
+            } else {
+              calculateRating_2player(1, user_about[player1user_id].rating2, user_about[player2user_id].rating2, user_about[player1user_id].rd2, user_about[player2user_id].rd2)
               .then(data => {
                 updateRating(player1user_id, data[0]);
                 updateRating(player2user_id, data[1]);
               });
             }
           }
-          current_game.running = false;
-          const game_index = active_games.indexOf(game_uuid)
-          active_games.splice(game_index, 1)
         }
-
-        var meta = []
-        if (new_food) {
-          meta.push(['food', current_game.food])
-        }
-        var player_num = 1
         player_list.forEach(player_to_check => {
-          meta.push(['player' + player_num, [player_to_check.old_direction, player_to_check.snake_body.length, player_to_check.dead]])
-          player_num ++
-        });
-        player_num = 0
-
-        uuids.forEach(player_uuid => {
-          if (UUID_WS.hasOwnProperty(player_uuid)) {
-            sendToWs(UUID_WS[player_uuid][0], 'game', 'tick', meta)
+          if (!player_to_check.left) {
+            if (winner !== player_to_check && !player_to_check.left) {
+              sendToWs(UUID_WS[player_to_check.uuid][0], 'end', user_about[winner.user_id].username + ' won the game!', [])
+            }
+            UUID_WS[player_to_check.uuid][1] = false
           }
         });
+        current_game.running = false;
+        const game_index = active_games.indexOf(game_uuid)
+        active_games.splice(game_index, 1)
       }
-    } else if (current_game.running) {
-      current_game.tick = !current_game.tick
+      // draw so 0 players remaing (draw)
+      else if (current_game.remaining < 1) {
+        player_list.forEach(player_to_check => {
+          if (!player_to_check.left) {
+            sendToWs(UUID_WS[player_to_check.uuid][0], 'end', 'DRAW!', [])
+          }
+          UUID_WS[player_to_check.uuid][1] = false
+        });
+        if (current_game.rated) {
+          // draw
+          if (current_game.mode === 2) {
+            calculateRating_2player(2, user_about[player1user_id].rating2, user_about[player2user_id].rating2, user_about[player1user_id].rd2, user_about[player2user_id].rd2)
+            .then(data => {
+              updateRating(player1user_id, data[0]);
+              updateRating(player2user_id, data[1]);
+            });
+          }
+        }
+        current_game.running = false;
+        const game_index = active_games.indexOf(game_uuid)
+        active_games.splice(game_index, 1)
+      }
+
+      var meta = []
+      if (new_food) {
+        meta.push(['food', current_game.food])
+      }
+      var player_num = 1
+      player_list.forEach(player_to_check => {
+        meta.push(['player' + player_num, [player_to_check.old_direction, player_to_check.snake_body.length, player_to_check.dead]])
+        player_num ++
+      });
+      player_num = 0
+
+      uuids.forEach(player_uuid => {
+        if (UUID_WS.hasOwnProperty(player_uuid)) {
+          sendToWs(UUID_WS[player_uuid][0], 'game', 'tick', meta)
+        }
+      });
     }
+  } else if (current_game.running) {
+    current_game.tick = !current_game.tick
   }
 }
 
