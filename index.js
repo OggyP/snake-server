@@ -39,7 +39,7 @@ var con = mysql.createConnection({
     database: "snake"
 });
 
-con.connect(function(err) {
+con.connect(function (err) {
     if (err) throw err;
     console.log("MYSQL Connected!");
 });
@@ -50,28 +50,37 @@ const { v4: uuidv4 } = require('uuid');
 // ==========================================
 // ==========================================
 
+const startingInfo = [ // Location, direction
+    [[0, 0], [0, 1]], // TOP LEFT
+    [[159, 74], [0, -1]], // BOTTOM RIGHT
+    [[0, 74], [0, -1]], // BOTTOM LEFT
+    [[159, 0], [0, 1]], // TOP RIGHT
+    [[0 + 39, 0], [0, 1]], // TOP LEFT MID
+    [[159 - 39, 74], [0, -1]], // BOTTOM RIGHT
+    [[0 + 39, 74], [0, -1]], // BOTTOM LEFT
+    [[159 - 39, 0], [0, 1]], // TOP RIGHT
+]
+
 // Classes
 class game {
     // player1_uuid, player2_uuid, uuid, player1_user_id, player2_user_id
     //NEW GAME UUID, PLAYERS [PLAYER UUID, PLAYER USER ID]
     // version is the specific "mode" 0 = normal, 1 = 'tron' like inifinite growth
     constructor(uuid, rated, players, version = 0) {
+        console.log(11)
         this.player_left = [false];
         this.uuid = uuid
         this.tick = true
         this.version = version
-        this.mode = players.length
-        this.player1 = new player(players[0][0], [0, 0], [0, 1], players[0][1], players[0][2])
-        this.player2 = new player(players[1][0], [159, 74], [0, -1], players[1][1], players[1][2])
-        if (players.length > 2) {
-            this.player3 = new player(players[2][0], [0, 74], [0, -1], players[2][1], players[2][2])
+        this.players = []
+        for (let i = 0; i < players.length; i++) {
+            console.log(startingInfo[i])
+            this.players.push(new player(players[i][0], startingInfo[i][0], startingInfo[i][1], players[i][1], players[i][2]))
         }
-        if (players.length > 3) {
-            this.player4 = new player(players[3][0], [159, 0], [0, 1], players[3][1], players[3][2])
-        }
+        console.log(12)
         this.remaining = players.length
-            // previous_remaining will show how many platers were remaining last tick
-            // used to check if a draw has occoured this tick in 3 player rated.
+        // previous_remaining will show how many platers were remaining last tick
+        // used to check if a draw has occoured this tick in 3 player rated.
         this.previous_remaining = players.length
         this.countdown = 15;
         this.start = false;
@@ -79,17 +88,13 @@ class game {
         this.running = true;
         this.left = [];
         this.rated = rated
+        console.log(13)
     }
 
     player_uuids() {
         let uuids = [];
-        uuids.push(this.player1.uuid)
-        uuids.push(this.player2.uuid)
-        if (this.player3 != null) {
-            uuids.push(this.player3.uuid)
-        }
-        if (this.player4 != null) {
-            uuids.push(this.player4.uuid)
+        for (let i = 0; i < this.players.length; i++) {
+            uuids.push(this.players[i].uuid)
         }
         return uuids;
     }
@@ -99,12 +104,9 @@ class game {
     }
 
     player_list() {
-        data = [this.player1, this.player2]
-        if (this.player3 != null) {
-            data.push(this.player3)
-        }
-        if (this.player4 != null) {
-            data.push(this.player4)
+        data = []
+        for (let i = 0; i < this.players.length; i++) {
+            data.push(this.players[i])
         }
         return data;
     }
@@ -158,10 +160,10 @@ class queue {
             if (!this.hasOwnProperty("player" + i)) {
                 this["player" + i] = [userWS, userUUID, userID];
                 this.waitingAmt++
-                    sendToWs(userWS, 'match', 'player wait', [])
+                sendToWs(userWS, 'match', 'player wait', [])
                 UUID_WS[userUUID][3] = true
                 UUID_WS[userUUID][4] = this.uuid
-                userPlayer = "player" + i
+                userPlayer = i - 1
                 this.sendAllPlayerList()
                 break;
             }
@@ -169,6 +171,7 @@ class queue {
         if (this.waitingAmt === this.maxPlayers) {
             console.log("Game full | UUID: " + this.uuid + " | Player Amount: " + this.maxPlayers + " | Rated: " + this.rated + " | Version: " + this.mode)
             let playerList = []
+            console.log(1)
             for (let i = 1; i <= this.maxPlayers; i++) {
                 playerList.push([this["player" + i][1], this["player" + i][2], user_about[this["player" + i][2]].rating3])
             }
@@ -179,20 +182,26 @@ class queue {
             meta.push(['player', 0])
             meta.push(['mode', this.maxPlayers])
             meta.push(['food', newGame.food])
-            for (let j = 1; j <= this.maxPlayers; j++) {
-                meta.push(['player' + j, JSON.stringify(user_about[this["player" + j][2]])])
-            }
+            let playersInfo = []
+            console.log(2)
+            for (let j = 1; j <= this.maxPlayers; j++)
+                playersInfo.push(user_about[this["player" + j][2]])
+
+            meta.push(['players', playersInfo])
+
             for (let i = 1; i <= this.maxPlayers; i++) {
-                meta[0][1] = i
+                meta[0][1]  = i
                 sendToWs(this["player" + i][0], 'match', 'found', meta)
                 UUID_WS[this["player" + i][1]][1] = true
                 UUID_WS[this["player" + i][1]][3] = false
                 delete this["player" + i]
             }
+            console.log(3)
             active_games.push(this.uuid)
             games[this.uuid] = newGame
             this.waitingAmt = 0
             this.uuid = uuidv4();
+            console.log(4)
         }
         return userPlayer;
     }
@@ -200,7 +209,7 @@ class queue {
         for (let i = 1; i <= this.maxPlayers; i++) {
             if (this.hasOwnProperty("player" + i) && this["player" + i][1] === userUUID) {
                 this.waitingAmt--
-                    UUID_WS[this["player" + i][1]][3] = false
+                UUID_WS[this["player" + i][1]][3] = false
                 delete this["player" + i]
                 console.log("User deleted from game")
                 this.sendAllPlayerList()
@@ -315,7 +324,7 @@ const calc3playerRating = (ownRating, scoreVplayer1, player1rating, scoreVplayer
 
 // Get tokens that are valid from the last week and store the user ids associated
 var savedTokens = {}
-con.query("SELECT user_id, token, tokenTime FROM users WHERE token IS NOT NULL AND tokenTime IS NOT NULL AND tokenTime >= curdate() - INTERVAL DAYOFWEEK(curdate())+6 DAY", function(err, results, fields) {
+con.query("SELECT user_id, token, tokenTime FROM users WHERE token IS NOT NULL AND tokenTime IS NOT NULL AND tokenTime >= curdate() - INTERVAL DAYOFWEEK(curdate())+6 DAY", function (err, results, fields) {
     if (err) throw err;
     if (results.length !== 0) {
         results.forEach(result => {
@@ -333,7 +342,7 @@ const default_rating = 1200;
 const default_rating_deviation = 350;
 
 // SERVER VERSION
-const version = 6.2;
+const version = 7.1;
 // =================
 var private_games = {}
 var games = {};
@@ -346,7 +355,7 @@ var active_games = [];
 var user_regex = new RegExp("^[0-9A-Za-z _.-]+$");
 const x_box_amount = 160
 const y_box_amount = 75
-    // 2d array matching idex of CLIENTS, [init, WS_ID, user id, username, chat_id, admin]
+// 2d array matching idex of CLIENTS, [init, WS_ID, user id, username, chat_id, admin]
 
 // first number indicates the amount of players
 // If an R is there then it is rated
@@ -354,9 +363,6 @@ const y_box_amount = 75
 var queues = [
     ["2pR", 2, true, 0],
     ["3pR", 3, true, 0],
-    ["2p", 2, false, 0],
-    ["3p", 3, false, 0],
-    ["4p", 4, false, 0],
     ["2pv1", 2, false, 1],
     ["3pv1", 3, false, 1],
     ["4pv1", 4, false, 1],
@@ -364,9 +370,25 @@ var queues = [
     ["3pv2", 3, false, 2],
     ["4pv2", 4, false, 2]
 ]
+
+for (let i = 2; i <= 8; i++ ) {
+    queues.push([i + "p", i, false, 0],) // Unrated normal
+    queues.push([i + "pv1", i, false, 1],) // Tron
+    queues.push([i + "pv2", i, false, 2],) // Double Speed
+}
+
 var queueList = new matchQueue(queues)
 
-ws.on('connection', function(ws) {
+function checkConnection(ws) {
+    const isAlive = ws.readyState === ws.OPEN;
+    if (!isAlive) {
+        console.log(`Client ${ws.clientId} is not connected`);
+        return ws.terminate();
+    }
+    ws.ping();
+}
+
+ws.on('connection', function (ws) {
     console.log('Client connection attempt')
     CLIENTS.push(ws);
     const UUID = uuidv4();
@@ -375,12 +397,12 @@ ws.on('connection', function(ws) {
     var user_id;
     var private_game_code;
     UUID_WS[UUID] = [ws, false, false, false, "", false]
-        //ws, in game, private, in queue, game UUID
+    //ws, in game, private, in queue, game UUID
     sendToWs(ws, 'gameVersion', version, [
-            ["modes", queues]
-        ])
-        // On message
-    ws.on('message', function(message) {
+        ["modes", queues]
+    ])
+    // On message
+    ws.on('message', function (message) {
         var game_uuid = UUID_WS[UUID][4]
         try {
             rec_msg = JSON.parse(message)
@@ -395,7 +417,7 @@ ws.on('connection', function(ws) {
                         } else if (rec_msg.content === 'new private') {
                             console.log('Private game')
                             UUID_WS[UUID][2] = true;
-                            player = 'player1'
+                            player = 0
                             private_game_code = getRndInteger(1000000, 9999999);
                             game_uuid = uuidv4();
                             UUID_WS[UUID][4] = game_uuid
@@ -412,10 +434,10 @@ ws.on('connection', function(ws) {
                             if (private_games.hasOwnProperty(rec_msg.code)) {
                                 var found_priv_game = private_games[rec_msg.code]
                                 console.log('Found private game')
-                                player = 'player2'
-                                    // player1_uuid, player2_uuid, uuid, player1_user_id, player2_user_id
-                                    //NEW GAME UUID, PLAYERS [PLAYER UUID, PLAYER USER ID]
-                                    //[UUID, game_uuid, user_id]
+                                player = 1
+                                // player1_uuid, player2_uuid, uuid, player1_user_id, player2_user_id
+                                //NEW GAME UUID, PLAYERS [PLAYER UUID, PLAYER USER ID]
+                                //[UUID, game_uuid, user_id]
                                 new_game = new game(found_priv_game[1], false, [
                                     [found_priv_game[0], found_priv_game[2]],
                                     [UUID, user_id]
@@ -426,14 +448,12 @@ ws.on('connection', function(ws) {
                                 sendToWs(ws, 'match', 'found', [
                                     ['player', 2],
                                     ['food', new_game.food],
-                                    ['player1', JSON.stringify(user_about[new_game.player1.user_id])],
-                                    ['player2', JSON.stringify(user_about[new_game.player2.user_id])]
+                                    ['players', [user_about[new_game.players[0].user_id], user_about[new_game.players[1].user_id]]]
                                 ])
-                                sendToWs(UUID_WS[new_game.player1.uuid][0], 'match', 'found', [
+                                sendToWs(UUID_WS[new_game.players[0].uuid][0], 'match', 'found', [
                                     ['player', 1],
                                     ['food', new_game.food],
-                                    ['player1', JSON.stringify(user_about[new_game.player1.user_id])],
-                                    ['player2', JSON.stringify(user_about[new_game.player2.user_id])]
+                                    ['players', [user_about[new_game.players[0].user_id], user_about[new_game.players[1].user_id]]]
                                 ])
                                 new_game.player_uuids().forEach(user_uuid_from_open_game => {
                                     const user_uuid = UUID_WS[user_uuid_from_open_game]
@@ -443,7 +463,7 @@ ws.on('connection', function(ws) {
                                 });
                                 active_games.push(game_uuid)
                                 games[game_uuid] = new_game
-                                    // delete private game listing
+                                // delete private game listing
                                 delete private_games[rec_msg.code]
                             } else {
                                 sendToWs(ws, 'error', 'Invalid private game code', [])
@@ -458,7 +478,7 @@ ws.on('connection', function(ws) {
                         console.log("logout")
                         delete savedTokens[rec_msg.token.split('|')[1]]
                         sql = "UPDATE users SET token = NULL, tokenTime = NULL WHERE user_id = " + mysql.escape(rec_msg.token.split('|')[1]);
-                        con.query(sql, function(err, register_insert_result) {
+                        con.query(sql, function (err, register_insert_result) {
                             if (err) throw err;
                             sendToWs(ws, 'logout', '', [])
                         });
@@ -466,18 +486,18 @@ ws.on('connection', function(ws) {
                 } else {
                     if (rec_msg.type === 'movement' && UUID_WS[UUID][1]) {
                         let current_game = games[game_uuid];
-                        if (current_game[player].direction !== JSON.stringify(rec_msg.content) && current_game[player].old_direction !== JSON.stringify(rec_msg.content)) {
+                        if (current_game.players[player].direction !== JSON.stringify(rec_msg.content) && current_game.players[player].old_direction !== JSON.stringify(rec_msg.content)) {
                             //Math.abs(rec_msg.content[1]) === 1
                             if (rec_msg.content[0] === 0) {
                                 // Y axis
-                                if (rec_msg.content[1] * -1 !== current_game[player].old_direction[1]) {
-                                    current_game[player].direction = [0, rec_msg.content[1]]
+                                if (rec_msg.content[1] * -1 !== current_game.players[player].old_direction[1]) {
+                                    current_game.players[player].direction = [0, rec_msg.content[1]]
                                 }
                                 //Math.abs(rec_msg.content[0]) === 1
                             } else {
                                 // X axis
-                                if (rec_msg.content[0] * -1 !== current_game[player].old_direction[0]) {
-                                    current_game[player].direction = [rec_msg.content[0], 0]
+                                if (rec_msg.content[0] * -1 !== current_game.players[player].old_direction[0]) {
+                                    current_game.players[player].direction = [rec_msg.content[0], 0]
                                 }
                             }
                         }
@@ -487,10 +507,10 @@ ws.on('connection', function(ws) {
                 }
             } else {
                 if (rec_msg.type === 'login') {
-                    con.query("SELECT * FROM users WHERE username = " + mysql.escape(rec_msg.content), function(err, result, fields) {
+                    con.query("SELECT * FROM users WHERE username = " + mysql.escape(rec_msg.content), function (err, result, fields) {
                         if (err) throw err;
                         if (result.length === 1) {
-                            bcrypt.compare(rec_msg.password, result[0].password_hash, function(error, response) {
+                            bcrypt.compare(rec_msg.password, result[0].password_hash, function (error, response) {
                                 if (response) {
                                     console.log(result[0].username + " logged in.")
                                     user_id = result[0].user_id
@@ -518,11 +538,11 @@ ws.on('connection', function(ws) {
                         }
                     });
                 } else if (rec_msg.type === 'register') {
-                    if (rec_msg.hasOwnProperty("content") && user_regex.test(rec_msg.content) && rec_msg.content.length < 100 && rec_msg.content.length >= 5) {
+                    if (rec_msg.hasOwnProperty("content") && user_regex.test(rec_msg.content) && rec_msg.content.length <= 20 && rec_msg.content.length >= 3) {
                         register(rec_msg, ws)
                     } else {
                         sendToWs(ws, 'register', 'fail', [
-                            ['reason', 'Only numbers, letters, hypens, periods, spaces and underscores are allowed for usernames. Maximum length is 100 characters. Min is 5']
+                            ['reason', 'Only numbers, letters, hypens, periods, spaces and underscores are allowed for usernames. Maximum length is 20 characters. Min is 3']
                         ])
                     }
                 } else if (rec_msg.type === 'token') {
@@ -530,9 +550,9 @@ ws.on('connection', function(ws) {
                     if (savedTokens.hasOwnProperty(tokenInfo[1])) {
                         var userID = tokenInfo[1]
                         console.log("User ID: " + userID + " hashed token: " + tokenInfo[0])
-                        bcrypt.compare(tokenInfo[0], savedTokens[userID].tokenHash, function(error, response) {
+                        bcrypt.compare(tokenInfo[0], savedTokens[userID].tokenHash, function (error, response) {
                             if (response) {
-                                con.query("SELECT * FROM users WHERE user_id = " + mysql.escape(userID) + " AND tokenTime >= curdate() - INTERVAL DAYOFWEEK(curdate())+7 DAY", function(err, result, fields) {
+                                con.query("SELECT * FROM users WHERE user_id = " + mysql.escape(userID) + " AND tokenTime >= curdate() - INTERVAL DAYOFWEEK(curdate())+7 DAY", function (err, result, fields) {
                                     if (err) throw err;
                                     if (result.length === 1) {
                                         console.log(result[0].username + " logged in.")
@@ -575,8 +595,15 @@ ws.on('connection', function(ws) {
         }
     });
 
+    // Check connection every 2.5 seconds
+    const interval = setInterval(() => {
+        checkConnection(ws);
+    }, 2500);
+
     // On close
-    ws.on('close', function(client) {
+    ws.on('close', function (client) {
+        clearInterval(interval);
+
         var game_uuid = UUID_WS[UUID][4]
         const removed_user = CLIENTS.indexOf(ws);
         // Remove client from list of clients
@@ -592,7 +619,9 @@ ws.on('connection', function(ws) {
     });
 
     // On error
-    ws.on('error', function(client) {
+    ws.on('error', function (client) {
+        clearInterval(interval);
+
         var game_uuid = UUID_WS[UUID][4]
         const removed_user = CLIENTS.indexOf(client);
         // Remove client from list of clients
@@ -622,30 +651,22 @@ function processGames() {
 }
 
 function runGame(k) {
+    console.log('running game', k)
     let game_uuid = active_games[k]
-    const current_game = games[game_uuid];
-    if (current_game.running && (current_game.version === 2 || current_game.tick)) {
-        current_game.tick = !current_game.tick
-        var player_list = [current_game.player1, current_game.player2]
-        if (current_game.mode > 2) {
-            player_list.push(current_game.player3)
-        }
-        if (current_game.mode > 3) {
-            player_list.push(current_game.player4)
-        }
-        const player1user_id = current_game.player1.user_id
-        const player2user_id = current_game.player2.user_id
+    const cgame = games[game_uuid];
+    if (cgame.running && (cgame.version === 2 || cgame.tick)) {
+        cgame.tick = !cgame.tick
         var new_food = false;
-        current_game.previous_remaining = current_game.remaining
-        let uuids = current_game.player_uuids();
-        if (current_game.left.length > 0) {
+        cgame.previous_remaining = cgame.remaining
+        let uuids = cgame.player_uuids();
+        if (cgame.left.length > 0) {
             console.log('Player Left')
-            current_game.left.forEach(left_player_uuid => {
-                player_list.forEach(player_to_check => {
+            cgame.left.forEach(left_player_uuid => {
+                cgame.players.forEach(player_to_check => {
                     if (left_player_uuid === player_to_check.uuid) {
                         if (!player_to_check.dead) {
-                            player_to_check.placement = current_game.remaining
-                            current_game.remaining--
+                            player_to_check.placement = cgame.remaining
+                            cgame.remaining--
                         }
                         player_to_check.dead = true
                         player_to_check.left = true
@@ -653,24 +674,27 @@ function runGame(k) {
                     }
                 });
             });
-            current_game.left = []
-        } else if (current_game.start !== true) {
-            if (current_game.countdown > 0) {
-                // Countdown till game start
-                uuids.forEach(player_uuid => {
-                    sendToWs(UUID_WS[player_uuid][0], 'countdown', current_game.countdown, [])
-                });
-                current_game.countdown -= 1;
-            } else {
-                console.log(current_game.uuid + ' | game started')
-                current_game.start = true;
-                uuids.forEach(player_uuid => {
-                    sendToWs(UUID_WS[player_uuid][0], 'countdown', 0, [])
-                });
+            cgame.left = []
+        } else if (cgame.start !== true) {
+            console.log('start', cgame.tick)
+            if (!cgame.tick) {
+                if (cgame.countdown > 0) {
+                    // Countdown till game start
+                    uuids.forEach(player_uuid => {
+                        sendToWs(UUID_WS[player_uuid][0], 'countdown', cgame.countdown, [])
+                    });
+                    cgame.countdown -= 1;
+                } else {
+                    console.log(cgame.uuid + ' | game started')
+                    cgame.start = true;
+                    uuids.forEach(player_uuid => {
+                        sendToWs(UUID_WS[player_uuid][0], 'countdown', 0, [])
+                    });
+                }
             }
         } else {
             // for each tick
-            player_list.forEach(each_player => {
+            cgame.players.forEach(each_player => {
                 if (each_player.diedThisTick) {
                     each_player.diedThisTick = false;
                 }
@@ -684,27 +708,27 @@ function runGame(k) {
                         each_player.food_countdown -= 1;
                     }
 
-                    if (each_player.food_countdown === 0 && current_game.version !== 1) {
+                    if (each_player.food_countdown === 0 && cgame.version !== 1) {
                         let dead_cell = each_player.snake_body.shift()
                     }
 
-                    if (JSON.stringify(each_player.snake_head) === JSON.stringify(current_game.food)) {
+                    if (JSON.stringify(each_player.snake_head) === JSON.stringify(cgame.food)) {
 
                         var in_body = true
                         while (in_body) {
                             var to_be_food = [getRndInteger(0, x_box_amount - 1), getRndInteger(0, y_box_amount - 1)]
                             all_cells = []
-                            player_list.forEach(food_each_player => {
+                            cgame.players.forEach(food_each_player => {
                                 all_cells = all_cells.concat(food_each_player.snake_body)
                             });
                             in_body = false;
-                            all_cells.forEach(item => {
+                            cgame.players.forEach(item => {
                                 if (JSON.stringify(item) === JSON.stringify(to_be_food)) {
                                     in_body = true;
                                 }
                             });
                         }
-                        current_game.food = to_be_food.slice()
+                        cgame.food = to_be_food.slice()
                         new_food = true
                         each_player.food_countdown += 51;
                     }
@@ -714,15 +738,15 @@ function runGame(k) {
             });
 
             all_cells = []
-            player_list.forEach(food_each_player => {
+            cgame.players.forEach(food_each_player => {
                 all_cells = all_cells.concat(food_each_player.snake_body)
             });
 
             // Check for win / loss
-            player_list.forEach(player_to_check => {
+            cgame.players.forEach(player_to_check => {
                 if (!player_to_check.dead) {
                     var collision_amt = 0
-                    player_list.forEach(second_player_head => {
+                    cgame.players.forEach(second_player_head => {
                         if (!second_player_head.dead) {
                             //if on top of each other
                             if (JSON.stringify(player_to_check.snake_head) == JSON.stringify(second_player_head.snake_head)) {
@@ -752,41 +776,41 @@ function runGame(k) {
                 }
             });
 
-            player_list.forEach(player_to_check => {
+            cgame.players.forEach(player_to_check => {
                 // above 1 cus it thinks it is always hitting into its own head
                 if (player_to_check.collision_amt > 1) {
                     console.log('Person died')
                     player_to_check.collision_amt = 0
                     player_to_check.dead = true;
                     player_to_check.diedThisTick = true;
-                    player_to_check.placement = current_game.remaining
-                    current_game.remaining--
-                        sendToWs(UUID_WS[player_to_check.uuid][0], 'game alert', 'YOU DIED!', [
-                            ['placement', player_to_check.placement]
-                        ])
+                    player_to_check.placement = cgame.remaining
+                    cgame.remaining--
+                    sendToWs(UUID_WS[player_to_check.uuid][0], 'game alert', 'YOU DIED!', [
+                        ['placement', player_to_check.placement]
+                    ])
                 }
             });
 
-            if (current_game.remaining === 0) {
+            if (cgame.remaining === 0) {
                 var longestLength = 0;
-                player_list.forEach(player_to_check => {
+                cgame.players.forEach(player_to_check => {
                     if (player_to_check.snake_body.length > longestLength && player_to_check.diedThisTick) {
                         longestLength = player_to_check.snake_body.length
                     }
                 });
 
                 var amountLongest = 0;
-                player_list.forEach(player_to_check => {
+                cgame.players.forEach(player_to_check => {
                     if (player_to_check.snake_body.length === longestLength && player_to_check.diedThisTick) {
                         amountLongest++
                     }
                 });
 
                 if (amountLongest === 1) {
-                    player_list.forEach(player_to_check => {
+                    cgame.players.forEach(player_to_check => {
                         if (player_to_check.snake_body.length === longestLength && player_to_check.diedThisTick) {
                             player_to_check.dead = false;
-                            current_game.remaining = 1;
+                            cgame.remaining = 1;
                             console.log("snake ressurected")
                         }
                     });
@@ -794,30 +818,29 @@ function runGame(k) {
             }
 
             // update 3 player rated rating
-            if (current_game.rated && current_game.previous_remaining !== current_game.remaining && current_game.mode === 3) {
-                var dead_amt = current_game.previous_remaining - current_game.remaining
-                player_list.forEach(player_to_check => {
+            if (cgame.rated && cgame.previous_remaining !== cgame.remaining && cgame.mode === 3) {
+                var dead_amt = cgame.previous_remaining - cgame.remaining
+                cgame.players.forEach(player_to_check => {
                     if (player_to_check.dead && !player_to_check.rated && player_to_check.diedThisTick) {
                         player_to_check.rated = true;
-                        var all_players = [current_game.player1, current_game.player2, current_game.player3]
-                        var own_index = all_players.indexOf(player_to_check)
-                        all_players.splice(own_index, 1)
-                            // player died this tick
+                        var own_index = cgame.players.indexOf(player_to_check)
+                        cgame.players.splice(own_index, 1)
+                        // player died this tick
                         if (dead_amt === 3) {
                             console.log('All draw')
-                                // then all should be 0.5
-                            calc3playerRating(player_to_check.startRating, 0.5, all_players[0].startRating, 0.5, all_players[1].startRating)
+                            // then all should be 0.5
+                            calc3playerRating(player_to_check.startRating, 0.5, cgame.players[0].startRating, 0.5, cgame.players[1].startRating)
                                 .then(data => {
                                     update3Rating(player_to_check.user_id, data);
                                 });
                         } else if (dead_amt === 2) {
                             console.log("Two draw")
-                                // alive rating should be lost against, other player's rating should be tied against 
-                            if (current_game.remaining === 1) {
+                            // alive rating should be lost against, other player's rating should be tied against 
+                            if (cgame.remaining === 1) {
                                 // draw last
                                 var deadPlayerID;
                                 var alivePlayerID;
-                                all_players.forEach(playerIndexToCheck => {
+                                cgame.players.forEach(playerIndexToCheck => {
                                     if (!playerIndexToCheck.dead) {
                                         alivePlayerID = playerIndexToCheck.startRating;
                                     } else {
@@ -832,7 +855,7 @@ function runGame(k) {
                                 // draw first
                                 var loosingPlayer;
                                 var drawPlayer;
-                                all_players.forEach(playerIndexToCheck => {
+                                cgame.players.forEach(playerIndexToCheck => {
                                     if (playerIndexToCheck.placement < 3) {
                                         drawPlayer = playerIndexToCheck.startRating;
                                     } else {
@@ -847,12 +870,12 @@ function runGame(k) {
 
                         } else {
                             console.log('SINGLE PLAYER DIED 3 PLAYER RATED')
-                                // only 1 player died this round 
-                            if (current_game.remaining === 1) {
+                            // only 1 player died this round 
+                            if (cgame.remaining === 1) {
                                 // came second
                                 var deadPlayerID;
                                 var alivePlayerID;
-                                all_players.forEach(playerIndexToCheck => {
+                                cgame.players.forEach(playerIndexToCheck => {
                                     if (!playerIndexToCheck.dead) {
                                         alivePlayerID = playerIndexToCheck.startRating;
                                     } else {
@@ -865,7 +888,7 @@ function runGame(k) {
                                     });
                             } else {
                                 // remaining is 2 so the player came last
-                                calc3playerRating(player_to_check.startRating, 0, all_players[0].startRating, 0, all_players[1].startRating)
+                                calc3playerRating(player_to_check.startRating, 0, cgame.players[0].startRating, 0, cgame.players[1].startRating)
                                     .then(data => {
                                         //const calc3playerRating = (ownRating, scoreVplayer1, player1rating, scoreVplayer2, player2rating) 
                                         update3Rating(player_to_check.user_id, data);
@@ -877,27 +900,26 @@ function runGame(k) {
             }
 
             // 1 player remaining (1 player wins)
-            if (current_game.remaining === 1) {
+            if (cgame.remaining === 1) {
                 var winner;
-                player_list.forEach(player_to_check => {
+                cgame.players.forEach(player_to_check => {
                     if (!player_to_check.dead && !player_to_check.left) {
                         sendToWs(UUID_WS[player_to_check.uuid][0], 'end', 'YOU WIN!', [])
                         winner = player_to_check
                     }
                 });
-                if (current_game.rated) {
+                if (cgame.rated) {
                     // RATED CODE
-                    if (current_game.mode === 3) {
-                        var all_players = [current_game.player1, current_game.player2, current_game.player3]
-                        var own_index = all_players.indexOf(winner)
-                        all_players.splice(own_index, 1)
-                        calc3playerRating(winner.startRating, 1, all_players[0].startRating, 1, all_players[1].startRating)
+                    if (cgame.mode === 3) {
+                        var own_index = cgame.players.indexOf(winner)
+                        cgame.players.splice(own_index, 1)
+                        calc3playerRating(winner.startRating, 1, cgame.players[0].startRating, 1, cgame.players[1].startRating)
                             .then(data => {
                                 update3Rating(winner.user_id, data);
                             });
                     }
-                    if (current_game.mode === 2) {
-                        if (!current_game.player1.dead) {
+                    if (cgame.mode === 2) {
+                        if (!cgame.player[0].dead) {
                             calculateRating_2player(0, user_about[player1user_id].rating2, user_about[player2user_id].rating2, user_about[player1user_id].rd2, user_about[player2user_id].rd2)
                                 .then(data => {
                                     updateRating(player1user_id, data[0]);
@@ -912,7 +934,7 @@ function runGame(k) {
                         }
                     }
                 }
-                player_list.forEach(player_to_check => {
+                cgame.players.forEach(player_to_check => {
                     if (!player_to_check.left) {
                         if (winner !== player_to_check && !player_to_check.left) {
                             sendToWs(UUID_WS[player_to_check.uuid][0], 'end', user_about[winner.user_id].username + ' won the game!', [])
@@ -920,21 +942,21 @@ function runGame(k) {
                         UUID_WS[player_to_check.uuid][1] = false
                     }
                 });
-                current_game.running = false;
+                cgame.running = false;
                 const game_index = active_games.indexOf(game_uuid)
                 active_games.splice(game_index, 1)
             }
             // draw so 0 players remaing (draw)
-            else if (current_game.remaining < 1) {
-                player_list.forEach(player_to_check => {
+            else if (cgame.remaining < 1) {
+                cgame.players.forEach(player_to_check => {
                     if (!player_to_check.left) {
                         sendToWs(UUID_WS[player_to_check.uuid][0], 'end', 'DRAW!', [])
                     }
                     UUID_WS[player_to_check.uuid][1] = false
                 });
-                if (current_game.rated) {
+                if (cgame.rated) {
                     // draw
-                    if (current_game.mode === 2) {
+                    if (cgame.mode === 2) {
                         calculateRating_2player(2, user_about[player1user_id].rating2, user_about[player2user_id].rating2, user_about[player1user_id].rd2, user_about[player2user_id].rd2)
                             .then(data => {
                                 updateRating(player1user_id, data[0]);
@@ -942,21 +964,21 @@ function runGame(k) {
                             });
                     }
                 }
-                current_game.running = false;
+                cgame.running = false;
                 const game_index = active_games.indexOf(game_uuid)
                 active_games.splice(game_index, 1)
             }
 
             var meta = []
             if (new_food) {
-                meta.push(['food', current_game.food])
+                meta.push(['food', cgame.food])
             }
-            var player_num = 1
-            player_list.forEach(player_to_check => {
-                meta.push(['player' + player_num, [player_to_check.old_direction, player_to_check.snake_body.length, player_to_check.dead]])
-                player_num++
+            let playersInfoList = []
+            cgame.players.forEach(player_to_check => {
+                playersInfoList.push([player_to_check.old_direction, player_to_check.snake_body.length, player_to_check.dead])
             });
-            player_num = 0
+
+            meta.push(['snakes', playersInfoList])
 
             uuids.forEach(player_uuid => {
                 if (UUID_WS.hasOwnProperty(player_uuid)) {
@@ -964,8 +986,8 @@ function runGame(k) {
                 }
             });
         }
-    } else if (current_game.running) {
-        current_game.tick = !current_game.tick
+    } else if (cgame.running) {
+        cgame.tick = !cgame.tick
     }
 }
 
@@ -990,7 +1012,7 @@ function getRndInteger(min, max) {
 function updateRating(user_id, new_info) {
     var sql = "UPDATE users SET rating2 = " + mysql.escape(new_info[0]) + ", rd2 = " + mysql.escape(new_info[1]) + " WHERE user_id = " + mysql.escape(user_id);
     console.log(sql)
-    con.query(sql, function(err, result) {
+    con.query(sql, function (err, result) {
         if (err) throw err;
         user_about[user_id].rating2 = new_info[0];
         user_about[user_id].rd2 = new_info[1];
@@ -1000,7 +1022,7 @@ function updateRating(user_id, new_info) {
 function update3Rating(user_id, rating) {
     var sql = "UPDATE users SET rating3 = " + mysql.escape(rating) + " WHERE user_id = " + mysql.escape(user_id);
     console.log(sql)
-    con.query(sql, function(err, result) {
+    con.query(sql, function (err, result) {
         if (err) throw err;
         user_about[user_id].rating3 = rating;
     });
@@ -1018,7 +1040,7 @@ function generateToken(ws, userID, username) {
         // Save Hashed Token to SQL
         var sql = "UPDATE users SET token = " + mysql.escape(hash) + ", tokenTime = sysdate() WHERE user_id = " + mysql.escape(userID);
         console.log(sql)
-        con.query(sql, function(err, register_insert_result) {
+        con.query(sql, function (err, register_insert_result) {
             if (err) throw err;
             savedTokens[userID] = {}
             savedTokens[userID].tokenHash = hash
@@ -1037,7 +1059,7 @@ function verifyToken(ws, userID, clearToken, UUID) {
 }
 
 function register(msg, webSocketToSend) {
-    con.query("SELECT * FROM users WHERE username = " + mysql.escape(msg.content), function(err, result, fields) {
+    con.query("SELECT * FROM users WHERE username = " + mysql.escape(msg.content), function (err, result, fields) {
         if (err) throw err;
         if (result.length > 0) {
             sendToWs(webSocketToSend, 'register', 'fail', [
@@ -1047,7 +1069,7 @@ function register(msg, webSocketToSend) {
             bcrypt.hash(msg.password, passwordSaltRounds, (err, hash) => {
                 var sql = "INSERT INTO users (username, password_hash, rating2, rating3, rd2, title) VALUES (" + mysql.escape(msg.content) + ", " + mysql.escape(hash) + ", " + mysql.escape(default_rating) + ", " + mysql.escape(default_rating) + ", " + mysql.escape(default_rating_deviation) + ", \"\")";
                 console.log(sql)
-                con.query(sql, function(err, register_insert_result) {
+                con.query(sql, function (err, register_insert_result) {
                     if (err) throw err;
                     sendToWs(webSocketToSend, 'register', 'success', [])
                     console.log("New user created");
